@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>jddSend</title>
+    <style type="text/css" media="all">
+        body{ margin:0 auto;}
+        a{font-size:12px; color:#666; text-decoration:none;}
+        .div{ width: 50%;  margin:0 auto;}
+        #message{ width: 100%; font-size: 12px; line-height: 20px;height:300px; overflow: auto; border: solid 1px #ccc; padding: 5px}
+        #message p{line-height: 20px;margin: 0;padding:0;}
+        #message .me{text-align: right;}
+        #message p span{ color: red;}
+        #cookieName{width: 20%; line-height: 32px;height:32px; }
+        .button{ width: 13%; line-height: 40px;height:40px;}
+        .input{ width: 70%; line-height: 32px;height:32px;}
+        /** alert弹框**/
+        .alertBox{ padding: 5px ;width:200px; height:100px; background:#fff; position:fixed; right:-200px; bottom:10px; border: 1px solid #cccccc}
+        .alertBox .close{ width:30px; height:22px; line-height:22px;display:block; float:right;}
+        .alertBox .tipTitle{ font-size: 14px; text-align: center; color: red;display:block;}
+        .alertBox .tips{ font-size: 12px; clear: both;line-height:22px; margin-top: 10px}
+    </style>
+</head>
+
+<script src="http://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="http://apps.bdimg.com/libs/jquery.cookie/1.4.1/jquery.cookie.js"></script>
+<body>
+<p></p>
+<div class="div">
+    <div id="message"></div>
+    <p></p>
+    <input class="input" type="text" id="sendContent" placeholder="请输入要发送的信息">
+    <button class="button" onclick="send()">Send</button>
+    <input type="text" id="cookieName" value="">
+    <button class="button" onclick="setCookieName()">设置用户名</button>
+</div>
+<div class="alertBox">
+    <a href="javascript:" class="close">关闭</a>
+    <div class="tipTitle">你有新的消息</div>
+    <div class="tips"></div>
+</div>
+<script>
+    setCookie();//每次刷新都重新登陆
+    var wsServer = 'ws://192.168.0.128:9502?name='+getCookie();
+    var websocket = new WebSocket(wsServer);
+    websocket.onopen = function (evt) {
+        alertBox('Connected to WebSocket server.')
+    };
+    websocket.onclose = function (evt) {
+        alertBox('Disconnected')
+    };
+    //接收到返回的信息
+    websocket.onmessage = function (evt) {
+        var data=JSON.parse(evt.data);
+        if(data.code==1){//上线
+            alertBox('用户'+data.result.name+'上线了！！！')
+        }else if(data.code==2){//下线
+            alertBox('用户'+data.result.name+'下线了！！！')
+        }else if(data.code==3){//发信息
+            appendMessage("<p>"+data.result.name+":"+data.result.data+"<br></p>")
+        }
+        //记录日志
+
+        //appendMessage(evt.data);
+    };
+    websocket.onerror = function (evt, e) {
+        alertBox('Error occured: ' + evt.data)
+        //console.log('Error occured: ' + evt.data);
+    };
+    $("body").keydown(function() {
+        //回车键发信息
+        if (event.keyCode == "13") {//keyCode=13是回车键
+            send();
+        };
+    });
+    /**
+     *发送信息
+     */
+    function send(){
+        websocket.send($("#sendContent").val());
+        $("#sendContent").val('');
+    }
+    //信息显示
+    function appendMessage($msg){
+        var btnVal= $.trim($('#message').html());
+        var str = $msg + ''+ btnVal;//
+        $('#message').html(str);//
+    }
+    /**
+     * 设置cookie,用户名随机生成
+     */
+    function setCookie(){
+        var name=$.cookie("name");
+        if(name == null || name == undefined || name == '' ){
+            $.cookie("name", "line"+Math.round(Math.random()*100));
+            $("#cookieName").val($.cookie("name"));//更新当前用户名
+        }else{
+            $.cookie("name", name);
+            $("#cookieName").val(name);//更新当前用户名
+        }
+    }
+    function getCookie(){
+        return $.cookie("name");
+    }
+
+
+    //设置特定的用户名
+    function setCookieName(){
+        if($('#cookieName').val()){
+            $.cookie("name",  $('#cookieName').val());//更新用户自己设置的用户名
+        }else{
+            $.cookie("name", "line"+Math.round(Math.random()*100));
+        }
+        location.reload();//刷新当前页面
+    }
+    /**
+     * 提示框赋值
+     * @param $msg
+     */
+    function alertBox($msg){
+        $('.alertBox').animate({right:'10px'},1000);
+        $(".alertBox > .tips ").html($msg);
+        $('.alertBox .close').click(function(){
+            $('.alertBox').animate({right:'-220px'},1000);
+        });
+        //3秒后自动关闭
+        setTimeout(function(){
+            $('.alertBox').animate({right:'-220px'},1000);
+        },5000);
+    }
+    getLog();
+    //读取log
+    function getLog(){
+        var filename='/log'+getNowFormatDate()+'.txt';
+        if(filename){
+            $.get(filename).success(function(content){
+                var reg = new RegExp(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+/g);
+                content= content.replace(reg,"");
+                content=content.split("\r\n"); //字符分割
+                //console.log(content)
+                for (i=0;i<content.length-1;i++)
+                {
+                    var str=JSON.parse(content[i]);
+                    if(str.code==3){
+                        appendMessage(str.result.name+":"+str.result.data+"<br>");
+                    }
+                }
+            });
+        }
+    }
+    //appendMessage("<p>"+data.result.name+":"+data.result.data+"<br></p>")
+    //获取当前时间日志文件名
+    function getNowFormatDate() {
+        var date = new Date();
+        var month = date.getMonth() + 1;
+        var strDate = date.getDate();
+        if (month >= 1 && month <= 9) {
+            month = "0" + month;
+        }
+        if (strDate >= 0 && strDate <= 9) {
+            strDate = "0" + strDate;
+        }
+        var currentdate = date.getFullYear() +  month +strDate;
+        return currentdate;
+    }
+
+</script>
+</body>
+</html>
